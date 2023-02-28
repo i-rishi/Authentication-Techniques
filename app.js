@@ -37,11 +37,13 @@ mongoose.connect(
 );
 
 //----------------------creating schemas----------------------
+const secretOfUser = [];
 const userSchema = new mongoose.Schema({
   email: String,
   password: String,
   googleId: String,
   facebookId: String,
+  secret: [String],
 });
 
 userSchema.plugin(passportLocalMongoose);
@@ -88,7 +90,6 @@ passport.use(
       callbackURL: "http://localhost:3000/auth/facebook/secrets",
     },
     function (accessToken, refreshToken, profile, cb) {
-      console.log(profile);
       User.findOrCreate({ facebookId: profile.id }, function (err, user) {
         return cb(err, user);
       });
@@ -99,6 +100,55 @@ passport.use(
 //----------------------get request for home route----------------------
 app.get("/", (req, res) => {
   res.render("Home");
+});
+
+//----------------------request for secret and submit route----------------------
+
+app.get("/secrets", (req, res) => {
+  User.find({ secret: { $ne: null } }, (err, foundUser) => {
+    if (err) {
+      console.log(err);
+    } else {
+      if (foundUser) {
+        res.render("secrets", { usersSecret: foundUser });
+      }
+    }
+  });
+});
+
+app.get("/submit", (req, res) => {
+  if (req.isAuthenticated()) {
+    res.render("submit");
+  } else {
+    res.redirect("/login");
+  }
+});
+
+app.post("/submit", (req, res) => {
+  const userSecret = req.body.secret;
+  User.findById(req.user.id, (err, foundUser) => {
+    if (err) {
+      console.log(err);
+    } else {
+      if (foundUser) {
+        // If `foundUser.secret` already exists, append the new secret to the array
+        if (foundUser.secret) {
+          foundUser.secret.push(userSecret);
+        }
+        // Otherwise, create a new array with the new secret as its only element
+        else {
+          foundUser.secret = [userSecret];
+        }
+        foundUser.save((err) => {
+          if (err) {
+            console.log(err);
+          } else {
+            res.redirect("/secrets");
+          }
+        });
+      }
+    }
+  });
 });
 
 //----------------------requests for google login----------------------
@@ -117,7 +167,7 @@ app.get(
   }
 );
 
-//requestion for loging into facebook
+//----------------------requesting for loging into facebook----------------------
 
 app.get("/auth/facebook", passport.authenticate("facebook"));
 
@@ -131,13 +181,6 @@ app.get(
 );
 
 //----------------------request for secret page----------------------
-app.get("/secrets", (req, res) => {
-  if (req.isAuthenticated()) {
-    res.render("secrets");
-  } else {
-    res.redirect("/login");
-  }
-});
 
 //----------------------reqest for logout----------------------
 app.get("/logout", (req, res) => {
